@@ -1,0 +1,74 @@
+# Minimal CI placeholder. Customize per product:
+#   * types-drift pattern (Pydantic → TS codegen) — uncomment + wire
+#   * lint / test jobs — fill in with the product's stack
+#   * fixture-pipeline / integration — add when the stack supports it
+#   * TSD-ref check — scripts/check_tsd_refs.py (reads PR body from stdin)
+#
+# TODO: review once the-wip and 24-hours-of-power are compared.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint (placeholder)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder — replace with real linters
+        run: |
+          echo "Add product-specific lint commands here (ruff, eslint, etc.)"
+          echo "This job must exit 0 for CI to pass until it is replaced."
+
+  test:
+    name: Tests (placeholder)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder — replace with real tests
+        run: |
+          echo "Add product-specific test commands here (pytest, vitest, etc.)"
+          echo "This job must exit 0 for CI to pass until it is replaced."
+
+  tsd-refs:
+    name: TSD §N.M refs resolve
+    runs-on: ubuntu-latest
+    # Only runs on PRs — the script reads the PR body from stdin.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check TSD refs in PR body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr view "$PR_NUM" --repo "$REPO" --json body -q .body | \
+            python3 scripts/check_tsd_refs.py
+
+  # Uncomment and wire when the product has a codegen path.
+  # types-drift:
+  #   name: Types drift check
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #     - name: Regenerate types
+  #       run: cd packages/types && python scripts/codegen.py
+  #     - name: Check for type drift
+  #       run: |
+  #         if ! git diff --exit-code packages/types/src/; then
+  #           echo "TYPE DRIFT DETECTED: run 'make types-generate' and commit the result"
+  #           git diff packages/types/src/
+  #           exit 1
+  #         fi

@@ -1,0 +1,73 @@
+# Deploy placeholder. Live deploy steps are COMMENTED OUT — uncomment and
+# customize for the product's actual targets (Vercel / Fly.io / Render /
+# Cloudflare / etc). Requires the matching repo secrets to be configured
+# (see TEMPLATE-CHECKLIST.md).
+#
+# TODO: review once the-wip and 24-hours-of-power are compared.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - web
+          - worker
+
+jobs:
+  deploy-placeholder:
+    name: Deploy placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder — no deploy wired yet
+        run: |
+          echo "Deploy workflow is a placeholder. Uncomment the real targets below"
+          echo "and wire the matching secrets (VERCEL_TOKEN, FLY_API_TOKEN, etc.)."
+          echo "Selected target: ${{ inputs.target }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # EXAMPLE: Vercel web deploy. Uncomment + fill in when the product has a
+  # Vercel project. Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID,
+  # VERCEL_PROJECT_ID.
+  # ─────────────────────────────────────────────────────────────────────────
+  # deploy-web:
+  #   name: Deploy Web to Vercel
+  #   runs-on: ubuntu-latest
+  #   if: ${{ inputs.target == 'all' || inputs.target == 'web' }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #     - uses: pnpm/action-setup@v4
+  #       with:
+  #         version: 9
+  #     - name: Install deps
+  #       run: pnpm install --frozen-lockfile
+  #     - name: Deploy to Vercel
+  #       run: cd apps/web && npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+  #       env:
+  #         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  #         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # EXAMPLE: Fly.io worker deploy. Uncomment + fill in when the product has
+  # a Fly app. Requires repo secret: FLY_API_TOKEN.
+  # ─────────────────────────────────────────────────────────────────────────
+  # deploy-worker:
+  #   name: Deploy Worker to Fly.io
+  #   runs-on: ubuntu-latest
+  #   if: ${{ inputs.target == 'all' || inputs.target == 'worker' }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: superfly/flyctl-actions/setup-flyctl@master
+  #     - name: Deploy to Fly.io
+  #       run: cd apps/worker && fly deploy
+  #       env:
+  #         FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

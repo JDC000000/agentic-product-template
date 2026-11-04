@@ -1,0 +1,105 @@
+# CODEOWNERS — paths where a change requires a human owner's review before merge.
+#
+# IMPORTANT: there is NO catch-all `*` owner, intentionally. The auto-merge
+# workflow (.github/workflows/auto-merge.yml) relies on CODEOWNERS being
+# a narrow "sensitive paths" list, not a repo-wide claim. A `*` owner would
+# force owner review on every PR once branch protection enables "Require
+# review from Code Owners", which defeats the whole triple-gate auto-merge
+# design for trivial rollback-safe PRs.
+#
+# To enforce this file, the repo's branch protection ruleset for `main`
+# must have "Require review from Code Owners" enabled. Without that
+# setting the file is advisory only. The auto-label workflow
+# (.github/workflows/auto-label-codeowners.yml) also applies
+# `needs-human-approval` on any PR whose diff touches these paths — that
+# label is the hard stop for the auto-merge workflow regardless of
+# branch-protection enforcement.
+#
+# When editing this file, also update auto-label-codeowners.yml's regex
+# (patterns inlined there because GitHub Actions has no CODEOWNERS parser).
+#
+# Pattern rules: last-match-wins per file.
+#
+# Replace `@YOUR_GITHUB_HANDLE` with the actual owner handle(s) — individual
+# users or @org/team. Keep the pattern list narrow and product-specific.
+# TODO: review once the-wip and 24-hours-of-power are compared.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Money / prod / legal / auth / CI / supply-chain surfaces.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Database migrations — any change here runs against prod on deploy.
+apps/worker/migrations/**                       @YOUR_GITHUB_HANDLE
+
+# Scripts — CI invokes several; broadening because a new script added here
+# can silently become part of the build or lint path.
+scripts/**                                      @YOUR_GITHUB_HANDLE
+
+# CI and workflow files — auto-merge rules, branch protection surfaces.
+.github/workflows/**                            @YOUR_GITHUB_HANDLE
+.github/CODEOWNERS                              @YOUR_GITHUB_HANDLE
+
+# Supply-chain: lockfiles, manifests, registry config. A malicious bump
+# or a transitive-dep swap would otherwise auto-merge silently.
+pnpm-lock.yaml                                  @YOUR_GITHUB_HANDLE
+pnpm-workspace.yaml                             @YOUR_GITHUB_HANDLE
+package.json                                    @YOUR_GITHUB_HANDLE
+apps/web/package.json                           @YOUR_GITHUB_HANDLE
+packages/types/package.json                     @YOUR_GITHUB_HANDLE
+apps/worker/requirements.txt                    @YOUR_GITHUB_HANDLE
+apps/worker/pyproject.toml                      @YOUR_GITHUB_HANDLE
+.npmrc                                          @YOUR_GITHUB_HANDLE
+
+# Env templates — define the SHAPE of secrets; a bad template can nudge
+# a reader to leak a real one, so lock-template changes get a human's eyes.
+.env.example                                    @YOUR_GITHUB_HANDLE
+.env.local.example                              @YOUR_GITHUB_HANDLE
+
+# Prompt-injection surfaces — repo docs read by every agent session.
+AGENTS.md                                       @YOUR_GITHUB_HANDLE
+CLAUDE.md                                       @YOUR_GITHUB_HANDLE
+.claude/agents/**                               @YOUR_GITHUB_HANDLE
+.claude/hooks.json                              @YOUR_GITHUB_HANDLE
+
+# Next.js security-relevant config.
+apps/web/next.config.js                         @YOUR_GITHUB_HANDLE
+apps/web/next.config.mjs                        @YOUR_GITHUB_HANDLE
+
+# Build invocation surface — CI calls `make` targets.
+Makefile                                        @YOUR_GITHUB_HANDLE
+
+# Deploy configuration — explicit paths only (bare `Dockerfile` would match
+# vendored copies).
+apps/worker/Dockerfile                          @YOUR_GITHUB_HANDLE
+apps/worker/fly.toml                            @YOUR_GITHUB_HANDLE
+docker-compose.yml                              @YOUR_GITHUB_HANDLE
+docker-compose.dev.yml                          @YOUR_GITHUB_HANDLE
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Billing / auth / emails / TSD — money + identity + transactional comms + spec.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Server-side auth helper — session + user lookup for every API route.
+apps/web/src/lib/auth/**                        @YOUR_GITHUB_HANDLE
+
+# Billing: payment providers, webhook, checkout, portal, entitlements.
+apps/web/src/lib/billing/**                     @YOUR_GITHUB_HANDLE
+apps/worker/src/worker/billing/**               @YOUR_GITHUB_HANDLE
+apps/web/src/app/api/billing/**                 @YOUR_GITHUB_HANDLE
+apps/web/src/app/api/entitlements/**            @YOUR_GITHUB_HANDLE
+
+# Transactional emails — a bad template can leak PII or send from the wrong identity.
+apps/web/src/lib/emails/**                      @YOUR_GITHUB_HANDLE
+
+# TSD + workplan — the spec every session is briefed against. Prompt-injection
+# surface for the same reason AGENTS.md / CLAUDE.md are.
+04-tsd-and-workplan/**                          @YOUR_GITHUB_HANDLE
+
+# Legal copy — ToS, privacy.
+apps/web/src/app/(landing)/terms/**             @YOUR_GITHUB_HANDLE
+apps/web/src/app/(landing)/privacy/**           @YOUR_GITHUB_HANDLE
+docs/legal/**                                   @YOUR_GITHUB_HANDLE
+
+# Vercel project config.
+apps/web/vercel.json                            @YOUR_GITHUB_HANDLE
+vercel.json                                     @YOUR_GITHUB_HANDLE

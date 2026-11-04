@@ -1,0 +1,161 @@
+# Auto-enable auto-merge on PRs that are triple-gated:
+#   * rollback-safe        — reversible by git revert
+#   * adversarial-reviewed — 3-lens review passed
+#   * NOT needs-human-approval — a human still eyes money/prod-touching code
+# When all three hold, fires `gh pr merge --auto`; GitHub's required status
+# checks still gate the actual merge.
+#
+# Fallback behavior: `gh pr merge --auto` returns 422 "Pull request is in
+# clean status" when CI is ALREADY green by labeling time (the normal case
+# for our adversarial-review-then-label flow, where review happens after
+# CI greens). The merge step catches that 422 and falls through to a
+# direct `gh pr merge --squash --delete-branch`. Any other error surfaces.
+#
+# Security: pull_request_target has write access but does NOT check out PR
+# code; only the merge call runs. Only repo collaborators can apply labels
+# so a hostile PR author cannot self-label into auto-merge.
+
+name: Auto-merge labeled PRs
+
+on:
+  pull_request_target:
+    types: [labeled, synchronize, opened, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize per-PR so a labeled run and a synchronize run cannot reorder and
+# leave auto-merge armed on an un-reviewed commit. cancel-in-progress stays
+# false — a drop-stale-review run must finish once it has started, even if
+# a labeled run arrives after it.
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge on rollback-safe + adversarial-reviewed PRs
+    runs-on: ubuntu-latest
+    # synchronize is excluded: new commits invalidate the review verdict, so the
+    # drop-stale-review job below handles that event instead.
+    if: >
+      github.event.action != 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'rollback-safe') &&
+      contains(github.event.pull_request.labels.*.name, 'adversarial-reviewed') &&
+      !contains(github.event.pull_request.labels.*.name, 'needs-human-approval')
+    steps:
+      - name: Enable auto-merge (squash, delete branch) — REST fallback for fine-grained PATs
+        env:
+          # Requires BOT_TOKEN repo secret for a bot service account (see TEMPLATE-CHECKLIST.md).
+          # BOT_TOKEN (fine-grained PAT for the bot account) cannot use GraphQL
+          # `mergePullRequest` — use REST `PUT /repos/{owner}/{repo}/pulls/{N}/merge` instead.
+          # Fallback to GITHUB_TOKEN if BOT_TOKEN is unset.
+          GH_TOKEN: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          PR_NUM="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "PR #$PR_NUM meets triple-gate; attempting REST merge against head $HEAD_SHA."
+
+          # REST merge; -f fields auto-string-cast — pass merge_method as string.
+          # Include sha so we abort if HEAD moved between label event and merge.
+          HTTP_OUT=$(gh api -X PUT "repos/$REPO/pulls/$PR_NUM/merge" \
+            --input - <<EOF 2>merge.err
+          {"merge_method":"squash","sha":"$HEAD_SHA"}
+          EOF
+          ) && MERGE_OK=1 || MERGE_OK=0
+
+          if [ "$MERGE_OK" = "1" ]; then
+            echo "Merge succeeded:"
+            echo "$HTTP_OUT"
+            # Delete the branch (best-effort; doesn't fail the merge if delete errors)
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH" 2>branch-delete.err || \
+              echo "Note: branch delete returned error (branch may already be gone):" && cat branch-delete.err || true
+            exit 0
+          fi
+
+          # Merge failed — classify the reason.
+          #
+          # Branch-protection blocks (CODEOWNER review required, status checks
+          # pending, review required, resolve-review-threads required, etc.) are
+          # EXPECTED outcomes for PRs that touch CODEOWNERS paths. The reviewer
+          # agent labels `adversarial-reviewed` the moment its review passes,
+          # which can race the `auto-label-codeowners` workflow that adds
+          # `needs-human-approval`. When this workflow fires in that window, it
+          # tries to merge and GitHub's branch protection correctly blocks it.
+          #
+          # That's not a workflow failure — it's the system working. Loudly
+          # failing the check-run here would then block `safe_merge.sh` (which
+          # refuses any PR with a FAILING check per AGENTS.md §11 M-1),
+          # requiring operator intervention to merge via `gh pr merge --admin`.
+          #
+          # So: detect branch-protection-blocked and exit 0 with a clear log
+          # line. Any other merge failure (missing permissions on BOT_TOKEN,
+          # conflict, HEAD moved, 5xx, etc.) still exits 1 and surfaces to the
+          # operator exactly as before.
+          echo "REST merge failed. Response body:"
+          cat merge.err
+
+          # Heuristic: branch-protection responses carry 405 Method Not Allowed
+          # and a message naming the specific rule. Codify the known vocabulary
+          # so unknown failures still fail loudly.
+          if grep -qE 'required status check|require.*(approving )?review|code owner|resolve.*review threads|Required status checks have not passed|At least [0-9]+ approving review|Review required|Changes requested' merge.err; then
+            echo "::notice::auto-merge skipped — branch protection requires further review/checks on this PR."
+            echo "::notice::This is expected for CODEOWNERS-protected PRs; a human merge with CODEOWNER approval is the path forward."
+            exit 0
+          fi
+
+          # Unknown failure — fail loudly so the operator sees it.
+          exit 1
+
+  drop-stale-review:
+    name: Drop adversarial-reviewed label on new commits (stale-approval guard)
+    runs-on: ubuntu-latest
+    # Any push to the PR head (including rebases and back-merges) invalidates the
+    # review. There is no reliable way to prove a push is content-neutral, so
+    # re-review on every synchronize is the safe default.
+    if: >
+      github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'adversarial-reviewed')
+    steps:
+      - name: Disable any pending auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        # Check first, then disable: the previous `|| echo ...` swallowed real
+        # errors (403, GraphQL, network) and let the label-removal step run
+        # with auto-merge still armed — the exact hole this guard is meant to
+        # close. If disable fails for a real reason, fail the job loudly.
+        run: |
+          set -euo pipefail
+          armed=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$armed" = "true" ]; then
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --disable-auto
+          else
+            echo "auto-merge was not armed; nothing to disable."
+          fi
+
+      - name: Remove label and comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            try {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number, name: 'adversarial-reviewed',
+              });
+            } catch (e) {
+              if (e.status !== 404) throw e; // already removed
+              core.info('Label already removed; skipping comment.');
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: 'Re-review required: new commits since adversarial review passed. Removing `adversarial-reviewed` label.',
+            });

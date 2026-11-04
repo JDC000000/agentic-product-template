@@ -1,0 +1,65 @@
+# Node
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Claude Code local tooling state — per-session agent worktrees, caches,
+# nothing project-level. Each dev's workstation generates its own.
+# BUT re-include .claude/agents/ and .claude/hooks.json so the registered
+# subagent definitions ship with the repo.
+.claude/*
+!.claude/agents/
+!.claude/hooks.json
+
+# Media files (fixtures/ are committed; loose binaries are not)
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.aac
+*.m4a
+!fixtures/**
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes
+postgres_data/
+minio_data/
+
+# Vercel
+.vercel/
+
+# TypeScript build info
+*.tsbuildinfo

@@ -1,0 +1,18 @@
+{
+  "_comment": "Claude Code hooks for this repo. The PostToolUse hook below is a placeholder for Langfuse tracing. TODO: install the companion langfuse-trace.sh script per docs/ops/langfuse-tracing.md and un-comment the entry. TODO: review once the-wip and 24-hours-of-power are compared.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_disabled": true,
+        "_description": "Example Langfuse trace hook. Enable by removing _disabled and writing scripts/langfuse-trace.sh.",
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/langfuse-trace.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
